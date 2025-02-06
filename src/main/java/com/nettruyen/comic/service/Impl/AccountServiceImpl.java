@@ -1,7 +1,6 @@
 package com.nettruyen.comic.service.Impl;
 
 import com.nettruyen.comic.service.IAccountService;
-import com.nettruyen.comic.util.OtpGenerator;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
