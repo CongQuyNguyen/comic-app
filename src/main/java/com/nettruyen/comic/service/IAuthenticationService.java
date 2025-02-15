@@ -18,4 +18,5 @@ public interface IAuthenticationService {
     String activeAccount(ActiveAccountRequest request);
 
     String register(UserCreationRequest request);
+
 }

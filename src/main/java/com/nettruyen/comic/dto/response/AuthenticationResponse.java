@@ -11,4 +11,5 @@ import lombok.experimental.FieldDefaults;
 public class AuthenticationResponse {
     Integer isActive;
     String message;
+    String token;
 }

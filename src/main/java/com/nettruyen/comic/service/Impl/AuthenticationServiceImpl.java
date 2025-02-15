@@ -13,12 +13,21 @@ import com.nettruyen.comic.repository.IUserRepository;
 import com.nettruyen.comic.service.IAuthenticationService;
 import com.nettruyen.comic.service.IAccountService;
 import com.nettruyen.comic.util.OtpGenerator;
+import com.nimbusds.jose.*;
+import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jwt.JWTClaimsSet;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Date;
 
 @Slf4j
 @Service
@@ -31,12 +40,15 @@ public class AuthenticationServiceImpl implements IAuthenticationService {
     PasswordEncoder passwordEncoder;
     IAccountService accountService;
 
+    @NonFinal
+    @Value("${jwt.signerKey}")
+    protected String SIGNER_KEY;
+
     @Override
     public AuthenticationResponse login(LoginRequest request) {
 
-        UserEntity user = userRepository.findByUsername(request.getUsername());
-        if (user == null)
-            throw new AppException(ErrorCode.USER_NOT_EXISTED);
+        UserEntity user = userRepository.findByUsername(request.getUsername())
+                .orElseThrow(()-> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         boolean authenticated = passwordEncoder.matches(request.getPassword(), user.getPassword());
         if (!authenticated)
@@ -45,6 +57,7 @@ public class AuthenticationServiceImpl implements IAuthenticationService {
         return AuthenticationResponse.builder()
                 .isActive((user.getIsActive() == null || user.getIsActive() == 0) ? 0 : 1)
                 .message("Login successful with " + user.getUsername())
+                .token(generateToken(user))
                 .build();
     }
 
@@ -53,9 +66,8 @@ public class AuthenticationServiceImpl implements IAuthenticationService {
 
         // Logic cho logout sẽ ở đây (token - khi mở rộng hệ thống)
 
-        UserEntity user = userRepository.findByUsername(username);
-        if (user == null)
-            throw new AppException(ErrorCode.USER_NOT_EXISTED);
+        UserEntity user = userRepository.findByUsername(username)
+                .orElseThrow(()-> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         return "Logout successful with " + user.getUsername();
     }
@@ -152,5 +164,26 @@ public class AuthenticationServiceImpl implements IAuthenticationService {
             log.error(e.getMessage());
             throw new AppException(ErrorCode.UNCATEGORIZED);
         }
+    }
+
+    private String generateToken(UserEntity user){
+        JWSHeader header = new JWSHeader(JWSAlgorithm.HS512);
+        JWTClaimsSet jwtClaimsSet =new JWTClaimsSet.Builder()
+                .subject(user.getUsername())
+                .issueTime(new Date())
+                .expirationTime(new Date(
+                        Instant.now().plus(1, ChronoUnit.HOURS).toEpochMilli()
+                ))
+                .build();
+        Payload payload = new Payload(jwtClaimsSet.toJSONObject());
+        JWSObject jwsObject = new JWSObject(header,payload);
+        try {
+            jwsObject.sign(new MACSigner(SIGNER_KEY.getBytes()));
+            return jwsObject.serialize();
+        }catch (JOSEException e){
+            log.error("Cannot create token");
+            throw new RuntimeException(e);
+        }
+
     }
 }
